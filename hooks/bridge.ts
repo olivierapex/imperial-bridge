@@ -1,0 +1,79 @@
+import type { ToolCallInput } from 'claude-code'
+
+import type { AgentRun, BridgeEvent } from '../types'
+
+export const AGENT_PREFIX = 'galacticempire:'
+export const TICK_MS = 400
+export const FADE_MS = 10_000
+export const REPORT_BEAM_MS = 3_000
+export const MAX_RUNS = 60
+export const MAX_EVENTS = 8
+
+export const ROSTER = [
+  { type: 'krennic', name: 'Director Krennic', model: 'sonnet' },
+  { type: 'viper-probe-droid', name: 'Viper Probe Droid', model: 'haiku' },
+  { type: 'dedra-meero', name: 'Supervisor Meero', model: 'haiku' },
+  { type: 'stormtrooper', name: 'Stormtrooper', model: 'haiku' },
+  { type: 'stormtrooper-sergeant', name: 'Stormtrooper Sergeant', model: 'sonnet' },
+  { type: 'lio-partagaz', name: 'Major Partagaz', model: 'haiku' },
+  { type: 'iden-versio', name: 'Commander Versio', model: 'sonnet' },
+  { type: 'dr-pershing', name: 'Dr. Pershing', model: 'sonnet' },
+  { type: 'imperial-officer', name: 'Imperial Officer', model: 'haiku' },
+  { type: 'syril-karn', name: 'Syril Karn', model: 'haiku' },
+]
+
+export type Phase = 'working' | 'fading' | 'idle'
+
+/** The agent type without the plugin prefix. */
+export function shortType(agentType: string): string {
+  return agentType.startsWith(AGENT_PREFIX) ? agentType.slice(AGENT_PREFIX.length) : agentType
+}
+
+export function displayName(shortName: string): string {
+  return ROSTER.find(agent => agent.type === shortName)?.name ?? shortName
+}
+
+/** The model family (haiku, sonnet, opus) named by a model alias or identifier. */
+export function modelFamily(model: string): string {
+  return ['haiku', 'sonnet', 'opus'].find(family => model.includes(family)) ?? model
+}
+
+/** The tool name plus the first 40 characters of a Bash command or a file name. */
+export function describeActivity(e: ToolCallInput): string {
+  if (e.tool === 'Bash') return `Bash ${e.command.slice(0, 40)}`
+  if (e.tool === 'Read' || e.tool === 'Edit' || e.tool === 'Write') {
+    return `${e.tool} ${(e.file_path.split('/').pop() ?? '').slice(0, 40)}`
+  }
+  return String(e.tool)
+}
+
+export function phaseOf(run: AgentRun, now: number): Phase {
+  if (run.status === 'working') return 'working'
+  return now - (run.finishedAt ?? now) < FADE_MS ? 'fading' : 'idle'
+}
+
+/** True while any agent works or is still fading, which keeps the redraw timer running. */
+export function hasMotion(runs: AgentRun[], now: number): boolean {
+  return runs.some(run => phaseOf(run, now) !== 'idle')
+}
+
+export function formatDuration(milliseconds: number): string {
+  const seconds = Math.max(0, Math.floor(milliseconds / 1000))
+  if (seconds < 60) return `${seconds}s`
+  return `${Math.floor(seconds / 60)}m${String(seconds % 60).padStart(2, '0')}s`
+}
+
+export function agentLabel(run: AgentRun): string {
+  return `${displayName(shortType(run.agentType))} #${run.ordinal}`
+}
+
+export function formatEvent(event: BridgeEvent): string {
+  const time = new Date(event.at).toTimeString().slice(0, 8)
+  return `${time}  ${event.agent}  ${event.event}  ${event.caption}`
+}
+
+/** Index of the run owned by an agent; a run not yet bound to an id is claimed by the first unknown id. */
+export function locate(runs: AgentRun[], agentId: string): number {
+  const bound = runs.findIndex(run => run.agentId === agentId)
+  return bound >= 0 ? bound : runs.findIndex(run => run.agentId === undefined && run.status === 'working')
+}

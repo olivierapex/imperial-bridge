@@ -1,0 +1,13 @@
+{
+  "name": "imperial-bridge",
+  "owner": {
+    "name": "Olivier Giroux"
+  },
+  "plugins": [
+    {
+      "name": "imperial-bridge",
+      "source": "./"
+    }
+  ],
+  "description": "Imperial Bridge, a live pane for Claude Code"
+}

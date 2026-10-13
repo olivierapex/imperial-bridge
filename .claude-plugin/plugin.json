@@ -1,0 +1,9 @@
+{
+  "name": "imperial-bridge",
+  "version": "0.1.0",
+  "description": "A live pane showing Grand Admiral Thrawn delegating to the imperial agents and receiving their reports.",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "Olivier Giroux"
+  }
+}
