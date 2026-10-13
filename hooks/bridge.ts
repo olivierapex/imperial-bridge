@@ -10,16 +10,17 @@ export const MAX_RUNS = 60
 export const MAX_EVENTS = 8
 
 export const ROSTER = [
-  { type: 'krennic', name: 'Director Krennic', model: 'sonnet' },
+  { type: 'imperial-engineer', name: 'Imperial Engineer', model: 'sonnet' },
+  { type: 'imperial-architect', name: 'Imperial Architect', model: 'sonnet' },
   { type: 'viper-probe-droid', name: 'Viper Probe Droid', model: 'haiku' },
-  { type: 'dedra-meero', name: 'Supervisor Meero', model: 'haiku' },
+  { type: 'isb-agent', name: 'ISB Agent', model: 'haiku' },
   { type: 'stormtrooper', name: 'Stormtrooper', model: 'haiku' },
   { type: 'stormtrooper-sergeant', name: 'Stormtrooper Sergeant', model: 'sonnet' },
-  { type: 'lio-partagaz', name: 'Major Partagaz', model: 'haiku' },
-  { type: 'iden-versio', name: 'Commander Versio', model: 'sonnet' },
-  { type: 'dr-pershing', name: 'Dr. Pershing', model: 'sonnet' },
+  { type: 'isb-major', name: 'ISB Major', model: 'haiku' },
+  { type: 'inquisitor', name: 'Inquisitor', model: 'sonnet' },
+  { type: 'science-officer', name: 'Science Officer', model: 'sonnet' },
   { type: 'imperial-officer', name: 'Imperial Officer', model: 'haiku' },
-  { type: 'syril-karn', name: 'Syril Karn', model: 'haiku' },
+  { type: 'imperial-bureaucrat', name: 'Imperial Bureaucrat', model: 'haiku' },
 ]
 
 export type Phase = 'working' | 'fading' | 'idle'
@@ -76,4 +77,37 @@ export function formatEvent(event: BridgeEvent): string {
 export function locate(runs: AgentRun[], agentId: string): number {
   const bound = runs.findIndex(run => run.agentId === agentId)
   return bound >= 0 ? bound : runs.findIndex(run => run.agentId === undefined && run.status === 'working')
+}
+
+/** The text cut to a length, with an ellipsis when it was longer. */
+export function clip(text: string, length: number): string {
+  return text.length > length ? `${text.slice(0, length - 1)}…` : text
+}
+
+/** The first non-empty line of a text, trimmed and cut to a length. */
+export function firstLine(text: string, length: number): string {
+  return clip(text.split('\n').find(line => line.trim() !== '')?.trim() ?? '', length)
+}
+
+/** The text wrapped to a width in at most a number of lines; the last line ends with an ellipsis when text is left over. */
+export function wrapText(text: string, width: number, maximumLines: number): string[] {
+  const lines: string[] = []
+  for (const paragraph of text.split('\n')) {
+    let current = ''
+    for (const word of paragraph.split(/\s+/).filter(piece => piece !== '')) {
+      const piece = clip(word, width)
+      if (current === '') current = piece
+      else if (current.length + 1 + piece.length <= width) current += ` ${piece}`
+      else {
+        lines.push(current)
+        current = piece
+      }
+    }
+    if (current !== '') lines.push(current)
+  }
+  if (lines.length <= maximumLines) return lines
+  const kept = lines.slice(0, maximumLines)
+  kept[maximumLines - 1] = clip(`${kept[maximumLines - 1]}…`, width)
+
+  return kept
 }

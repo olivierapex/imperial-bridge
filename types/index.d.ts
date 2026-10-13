@@ -4,12 +4,14 @@ export type AgentRun = {
   agentType: string
   ordinal: number
   description: string
+  order?: string
   model: string
   status: 'working' | 'reported' | 'aborted'
   startedAt: number
   finishedAt?: number
   durationMs?: number
   activity?: string
+  report?: string
 }
 
 export type BridgeEvent = {

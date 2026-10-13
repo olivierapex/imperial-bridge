@@ -2,9 +2,11 @@ import { atom, read, update } from 'claude-code'
 import type { Register, StateDollar } from 'claude-code'
 
 import type { AgentRun, BridgeEvent } from '../types'
-import { MAX_EVENTS, MAX_RUNS, TICK_MS, agentLabel, describeActivity, formatEvent, hasMotion, locate } from './bridge'
+import { MAX_EVENTS, MAX_RUNS, TICK_MS, agentLabel, clip, describeActivity, firstLine, formatEvent, hasMotion, locate } from './bridge'
 import { drawBridge } from './scene'
 
+const ORDER_LENGTH = 200
+const REPORT_LENGTH = 600
 const PANE = 'imperial-bridge'
 const TITLE = 'Imperial Bridge'
 const runsState = atom({ plugin: 'imperial-bridge', key: 'runs' } as const, [])
@@ -37,6 +39,7 @@ export const register: Register = on => {
       agentType: e.subagentType,
       ordinal: runs.filter(one => one.agentType === e.subagentType).length + 1,
       description: e.description,
+      order: firstLine(e.prompt, ORDER_LENGTH),
       model: e.model ?? e.parentModel,
       status: 'working',
       startedAt: now,
@@ -98,7 +101,7 @@ export const register: Register = on => {
       const run = runs[locate(runs, agentId)]
       if (run !== undefined && run.status === 'working') {
         await update($, runsState, list =>
-          list.map(one => (one === run || one.agentId === agentId ? { ...one, agentId, status, finishedAt: now, durationMs: e.durationMs, activity: undefined } : one)),
+          list.map(one => (one === run || one.agentId === agentId ? { ...one, agentId, status, finishedAt: now, durationMs: e.durationMs, activity: undefined, report: clip(e.answer.trim(), REPORT_LENGTH) } : one)),
         )
         await logEvent($, { at: now, agent: agentLabel(run), event: status, caption: run.description })
         await update($, nowState, () => now)
@@ -122,8 +125,7 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
-        <Svg source={drawBridge(runs, now)} alt={`Imperial Bridge map, ${active} agents working`} />
-        {lines}
+        <Svg source={drawBridge(runs, events, now)} alt={`Imperial Star Destroyer command bridge, ${active} agents working`} />
       </Box>
     )
   })

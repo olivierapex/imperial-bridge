@@ -1,142 +1,92 @@
-import type { AgentRun } from '../types'
-import { FADE_MS, REPORT_BEAM_MS, ROSTER, displayName, formatDuration, modelFamily, phaseOf, shortType } from './bridge'
+import type { AgentRun, BridgeEvent } from '../types'
+import { THRAWN_Z, WALKWAY, drawHall, drawThrawn, drawWalkway } from './backdrop'
+import { phaseOf } from './bridge'
+import { project } from './projection'
+import { TONES, drawConsole, drawPlate, layoutStations } from './stations'
+import type { Station } from './stations'
+import { PALETTE, glyphString, round, text } from './svg'
+import { BOTTOM, CONSOLE_TOP, drawTransmissions } from './transmissions'
 
-const WIDTH = 960
-const HEIGHT = 680
-const CENTER = { x: 480, y: 330 }
-const RING = { x: 330, y: 235 }
-const STATION = { width: 132, height: 50 }
-const SATELLITE_RADIUS = 10
+export const WIDTH = 1000
+export const HEIGHT = BOTTOM
 
-const BACKGROUND = '#0a0b0d'
-const HULL = '#5b6068'
-const TEXT = '#c8ccd2'
-const RED = '#d62a2a'
-const FAILURE = '#ff3b3b'
-const SUCCESS = '#3ddc84'
-const MODEL_COLORS: Record<string, string> = { haiku: '#2fd0e0', sonnet: '#f0a020', opus: '#e03030' }
-
-type Point = { x: number; y: number }
-type Station = { type: string; name: string; model: string; position: Point; runs: AgentRun[] }
-
-function escape(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-}
-
-function clip(text: string, length: number): string {
-  return text.length > length ? `${text.slice(0, length - 1)}…` : text
-}
-
-function colorOf(model: string): string {
-  return MODEL_COLORS[modelFamily(model)] ?? HULL
-}
-
-function clamp(value: number, low: number, high: number): number {
-  return Math.min(high, Math.max(low, value))
-}
-
-function buildStations(runs: AgentRun[]): Station[] {
-  const types = [...ROSTER.map(agent => agent.type)]
-  for (const run of runs) {
-    if (!types.includes(shortType(run.agentType))) types.push(shortType(run.agentType))
-  }
-  return types.map((type, index) => {
-    const angle = -Math.PI / 2 + (index * 2 * Math.PI) / types.length
-    const own = runs.filter(run => shortType(run.agentType) === type)
-    const latest = own[own.length - 1]
-    return {
-      type,
-      name: displayName(type),
-      model: latest?.model ?? ROSTER.find(agent => agent.type === type)?.model ?? 'unknown',
-      position: { x: CENTER.x + RING.x * Math.cos(angle), y: CENTER.y + RING.y * Math.sin(angle) },
-      runs: own,
-    }
-  })
-}
-
-function beam(from: Point, to: Point, color: string, now: number, opacity: number): string {
-  const offset = -((now / 40) % 14)
-  return `<line x1="${from.x.toFixed(1)}" y1="${from.y.toFixed(1)}" x2="${to.x.toFixed(1)}" y2="${to.y.toFixed(1)}" stroke="${color}" stroke-width="2" stroke-dasharray="6 8" stroke-dashoffset="${offset.toFixed(1)}" opacity="${opacity.toFixed(2)}"/>`
-}
-
-function text(x: number, y: number, content: string, color: string, size: number, anchor = 'middle', opacity = 1): string {
-  return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" fill="${color}" font-size="${size}" text-anchor="${anchor}" opacity="${opacity.toFixed(2)}">${escape(content)}</text>`
-}
-
-function drawStation(station: Station, now: number): string {
-  const active = station.runs.filter(run => run.status === 'working').length
-  const fading = station.runs.some(run => phaseOf(run, now) === 'fading')
-  const stroke = active > 0 ? colorOf(station.model) : fading ? SUCCESS : HULL
-  const { x, y } = station.position
-  const badge =
-    active > 1
-      ? `<circle cx="${x + STATION.width / 2}" cy="${y - STATION.height / 2}" r="12" fill="${RED}"/>${text(x + STATION.width / 2, y - STATION.height / 2 + 4, `×${active}`, TEXT, 11)}`
-      : ''
+function definitions(): string {
   return (
-    `<rect x="${x - STATION.width / 2}" y="${y - STATION.height / 2}" width="${STATION.width}" height="${STATION.height}" rx="4" fill="${BACKGROUND}" stroke="${stroke}" stroke-width="${active > 0 ? 2.5 : 1.5}" opacity="${active > 0 || fading ? 1 : 0.6}"/>` +
-    text(x, y - 3, station.name, TEXT, 12) +
-    text(x, y + 14, modelFamily(station.model), colorOf(station.model), 10) +
-    badge
+    `<defs>` +
+    `<linearGradient id="space" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#01030a"/><stop offset="0.7" stop-color="#07101f"/><stop offset="1" stop-color="#101c34"/></linearGradient>` +
+    `<linearGradient id="jump" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#020611"/><stop offset="1" stop-color="#0b1b3d"/></linearGradient>` +
+    `<radialGradient id="jumpCore"><stop offset="0" stop-color="#f4f9ff" stop-opacity="0.95"/><stop offset="0.35" stop-color="#9cc4ff" stop-opacity="0.45"/><stop offset="1" stop-color="#9cc4ff" stop-opacity="0"/></radialGradient>` +
+    `<radialGradient id="planet" cx="0.3" cy="0.22" r="0.95"><stop offset="0" stop-color="#9fb8d9"/><stop offset="0.35" stop-color="#52698f"/><stop offset="0.75" stop-color="#1b2740"/><stop offset="1" stop-color="#070b14"/></radialGradient>` +
+    `<linearGradient id="floor" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#0e1116"/><stop offset="1" stop-color="#1d222a"/></linearGradient>` +
+    `<linearGradient id="walkway" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#2c323b"/><stop offset="1" stop-color="#4a525e"/></linearGradient>` +
+    `<linearGradient id="wallLeft" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#101319"/><stop offset="1" stop-color="#232832"/></linearGradient>` +
+    `<linearGradient id="wallRight" x1="1" y1="0" x2="0" y2="0"><stop offset="0" stop-color="#101319"/><stop offset="1" stop-color="#232832"/></linearGradient>` +
+    `<linearGradient id="uniform" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#f6f9fc"/><stop offset="0.5" stop-color="#dfe5ec"/><stop offset="1" stop-color="#9ea9b6"/></linearGradient>` +
+    `<radialGradient id="face" cx="0.5" cy="0.4" r="0.7"><stop offset="0" stop-color="#0a121c" stop-opacity="0.75"/><stop offset="1" stop-color="#0a121c" stop-opacity="0.2"/></radialGradient>` +
+    `<radialGradient id="backlight"><stop offset="0" stop-color="#cfe2ff" stop-opacity="0.5"/><stop offset="1" stop-color="#cfe2ff" stop-opacity="0"/></radialGradient>` +
+    `<radialGradient id="vignette" cx="0.5" cy="0.45" r="0.75"><stop offset="0.55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.6"/></radialGradient>` +
+    `<linearGradient id="screenSheen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.12"/><stop offset="0.5" stop-color="#fff" stop-opacity="0"/></linearGradient>` +
+    `<radialGradient id="crt" cx="0.5" cy="0.45" r="0.8"><stop offset="0" stop-color="#0a2418"/><stop offset="1" stop-color="#020805"/></radialGradient>` +
+    `<pattern id="scan" width="4" height="3" patternUnits="userSpaceOnUse"><rect width="4" height="1" fill="#000"/></pattern>` +
+    `<linearGradient id="console" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a3039"/><stop offset="0.06" stop-color="#14181e"/><stop offset="1" stop-color="#07090c"/></linearGradient>` +
+    `<linearGradient id="beam" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1b2027"/><stop offset="1" stop-color="#090b0e"/></linearGradient>` +
+    `<clipPath id="stage"><rect width="${WIDTH}" height="${CONSOLE_TOP}"/></clipPath>` +
+    `<filter id="glowSoft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.2"/></filter>` +
+    `<filter id="haze" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="9"/></filter>` +
+    `</defs>`
   )
 }
 
-function satelliteLabel(run: AgentRun, now: number): string {
-  if (run.status === 'working') return `${run.activity ?? 'starting'} · ${formatDuration(now - run.startedAt)}`
-  return `${run.status} ${formatDuration(run.durationMs ?? 0)}`
-}
+/** A dotted line between Thrawn and a station, with a packet moving along it: out for an order, back for a report. */
+function drawLink(station: Station, target: { x: number; y: number }, now: number): string {
+  if (station.signal === 'none') return ''
+  const chest = project(0, WALKWAY.height + 1.35, THRAWN_Z)
+  const color = TONES[station.mood].glow
+  const progress = (now / 1400) % 1
+  const along = station.signal === 'order' ? progress : 1 - progress
+  const packet = { x: chest.x + (target.x - chest.x) * along, y: chest.y + (target.y - chest.y) * along }
 
-function drawSatellite(run: AgentRun, station: Station, slot: number, now: number): string {
-  const phase = phaseOf(run, now)
-  const outward = { x: station.position.x - CENTER.x, y: station.position.y - CENTER.y }
-  const length = Math.hypot(outward.x, outward.y) || 1
-  const unit = { x: outward.x / length, y: outward.y / length }
-  const distance = 62 + slot * 30
-  const sway = (slot % 2 === 0 ? 1 : -1) * 34
-  const position = {
-    x: clamp(station.position.x + unit.x * distance - unit.y * sway, 20, WIDTH - 20),
-    y: clamp(station.position.y + unit.y * distance + unit.x * sway, 20, HEIGHT - 20),
-  }
-  const fade = run.finishedAt === undefined ? 1 : 1 - (0.6 * (now - run.finishedAt)) / FADE_MS
-  const sinceFinish = now - (run.finishedAt ?? now)
-  const outcome = run.status === 'aborted' ? FAILURE : SUCCESS
-  const color = phase === 'working' ? colorOf(run.model) : outcome
-  const middle = { x: (CENTER.x + position.x) / 2, y: (CENTER.y + position.y) / 2 }
-  let beams = ''
-  if (phase === 'working') {
-    beams = beam(CENTER, position, color, now, 0.9) + text(middle.x, middle.y - 4, clip(run.description, 40), TEXT, 9)
-  } else if (sinceFinish < REPORT_BEAM_MS) {
-    beams = beam(position, CENTER, outcome, now, 0.9) + text(middle.x, middle.y - 4, clip(run.description, 40), TEXT, 9)
-  }
-  const onRight = unit.x >= 0
-  const circle =
-    `<circle cx="${position.x.toFixed(1)}" cy="${position.y.toFixed(1)}" r="${SATELLITE_RADIUS}" fill="${BACKGROUND}" stroke="${color}" stroke-width="2" opacity="${fade.toFixed(2)}"/>` +
-    text(position.x, position.y + 4, String(run.ordinal), TEXT, 10, 'middle', fade) +
-    text(position.x + (onRight ? 16 : -16), position.y + 3, satelliteLabel(run, now), color, 9, onRight ? 'start' : 'end', fade)
-  return `<g>${beams}</g><g>${circle}</g>`
-}
-
-/** The bridge map as an SVG document: Thrawn, the stations on the ring and one satellite per live instance. */
-export function drawBridge(runs: AgentRun[], now: number): string {
-  const stations = buildStations(runs)
-  const hull = stations
-    .map(({ position }) => `<line x1="${CENTER.x}" y1="${CENTER.y}" x2="${position.x.toFixed(1)}" y2="${position.y.toFixed(1)}" stroke="${HULL}" stroke-width="1" opacity="0.35"/>`)
-    .join('')
-  const body = stations
-    .map(station => {
-      const live = station.runs.filter(run => phaseOf(run, now) !== 'idle')
-      return drawStation(station, now) + live.map((run, slot) => drawSatellite(run, station, slot, now)).join('')
-    })
-    .join('')
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${WIDTH} ${HEIGHT}" font-family="monospace">` +
-    `<rect width="${WIDTH}" height="${HEIGHT}" fill="${BACKGROUND}"/>` +
-    `<ellipse cx="${CENTER.x}" cy="${CENTER.y}" rx="${RING.x}" ry="${RING.y}" fill="none" stroke="${HULL}" stroke-width="1" stroke-dasharray="2 6"/>` +
-    hull +
-    text(24, 32, 'IMPERIAL BRIDGE', RED, 14, 'start') +
-    body +
-    `<circle cx="${CENTER.x}" cy="${CENTER.y}" r="46" fill="${BACKGROUND}" stroke="${RED}" stroke-width="3"/>` +
-    text(CENTER.x, CENTER.y - 2, 'THRAWN', TEXT, 13) +
-    text(CENTER.x, CENTER.y + 14, 'Grand Admiral', HULL, 9) +
+    `<line x1="${round(chest.x)}" y1="${round(chest.y)}" x2="${round(target.x)}" y2="${round(target.y)}" stroke="${color}" stroke-width="1.8" stroke-dasharray="1.5 7" stroke-linecap="round" opacity="0.85"/>` +
+    `<circle cx="${round(packet.x)}" cy="${round(packet.y)}" r="5" fill="${color}" opacity="0.35" filter="url(#glowSoft)"/>` +
+    `<circle cx="${round(packet.x)}" cy="${round(packet.y)}" r="2.2" fill="#fff"/>`
+  )
+}
+
+function drawHeader(runs: AgentRun[], now: number): string {
+  const active = runs.filter(run => phaseOf(run, now) === 'working').length
+  const status = active === 0 ? 'ALL STATIONS STANDING BY' : `${active} ${active === 1 ? 'STATION' : 'STATIONS'} ACTIVE`
+
+  return (
+    `<rect width="${WIDTH}" height="34" fill="url(#beam)"/>` +
+    `<line x1="0" y1="34.5" x2="${WIDTH}" y2="34.5" stroke="${PALETTE.hullEdge}" stroke-width="1.2" opacity="0.8"/>` +
+    glyphString(24, 24, 'bridge-title', 10, 14, PALETTE.steel, 0.5) +
+    text(150, 22, 'COMMAND BRIDGE', PALETTE.steel, { size: 13, weight: 700, spacing: 2 }) +
+    text(WIDTH - 24, 22, status, active === 0 ? PALETTE.greenDim : PALETTE.amber, { size: 13, anchor: 'end', weight: 600, spacing: 1 })
+  )
+}
+
+/** The command bridge as an SVG document. */
+export function drawBridge(runs: AgentRun[], events: BridgeEvent[], now: number): string {
+  const stations = layoutStations(runs, now).sort((a, b) => b.rowZ - a.rowZ)
+  const plates = stations.map(station => drawPlate(station))
+  const links = stations.map((station, index) => drawLink(station, plates[index].anchor, now)).join('')
+  const isJumping = runs.some(run => phaseOf(run, now) === 'working')
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${WIDTH} ${HEIGHT}" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace">` +
+    definitions() +
+    `<rect width="${WIDTH}" height="${HEIGHT}" fill="${PALETTE.void}"/>` +
+    `<g clip-path="url(#stage)">` +
+    drawHall(isJumping, now) +
+    drawWalkway() +
+    drawThrawn() +
+    stations.map(station => drawConsole(station, now)).join('') +
+    links +
+    plates.map(plate => plate.markup).join('') +
+    `<rect width="${WIDTH}" height="${CONSOLE_TOP}" fill="url(#vignette)"/>` +
+    drawHeader(runs, now) +
+    `</g>` +
+    drawTransmissions(runs, events, now) +
     `</svg>`
   )
 }
