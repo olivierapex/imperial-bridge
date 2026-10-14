@@ -19,10 +19,18 @@ export type BridgeEvent = {
   agent: string
   event: 'spawned' | 'reported' | 'aborted'
   caption: string
+  model?: string
+}
+
+// Same shape as the engine's SessionRateLimit: this contract cannot import it.
+export type UsageLimit = {
+  kind: string
+  percentUsed: number
+  resetsAt?: string
 }
 
 declare module 'claude-code' {
   interface PluginState {
-    'imperial-bridge': { runs: AgentRun[]; events: BridgeEvent[]; now: number }
+    'imperial-bridge': { runs: AgentRun[]; events: BridgeEvent[]; now: number; usage?: UsageLimit[] }
   }
 }

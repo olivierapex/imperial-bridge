@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 
-import type { AgentRun, BridgeEvent } from '../types'
+import type { AgentRun, BridgeEvent, UsageLimit } from '../types'
 import { ROSTER } from '../hooks/bridge'
 import { drawBridge } from '../hooks/scene'
 
@@ -36,6 +36,15 @@ const aborted: AgentRun[] = [
   run('inquisitor', 1, { activity: 'Read register.tsx', description: 'Hunt hidden defects' }),
 ]
 
+const models: AgentRun[] = [
+  run('isb-agent', 1, { activity: 'Grep ssh', description: 'Audit the mod' }),
+  run('stormtrooper', 1, { activity: 'Bash npm test --silent', description: 'Run the checks' }),
+  run('stormtrooper', 2, { model: 'sonnet', activity: 'Read scene.ts', description: 'Scan the fixtures', order: 'Read the fixtures and list the stale names' }),
+  run('inquisitor', 1, { model: 'sonnet', activity: 'Read register.tsx', description: 'Hunt hidden defects' }),
+  run('imperial-engineer', 1, { model: 'opus', activity: 'Edit scene.ts', description: 'Build the bridge scene', order: 'Redraw the bridge scene as an Imperial Star Destroyer command deck' }),
+  run('viper-probe-droid', 1, { status: 'reported', finishedAt: NOW - 1_500, durationMs: 18_500, report: REPORT, description: 'Scan the logs', order: 'Scan the deployment logs for failed runs' }),
+]
+
 const busy: AgentRun[] = [
   ...ROSTER.map(agent => run(agent.type, 1, { activity: 'Bash ls -la hooks', description: `Task for ${agent.name}` })),
   run('stormtrooper', 2, { activity: 'Read scene.ts' }),
@@ -44,11 +53,21 @@ const busy: AgentRun[] = [
   run('general-purpose', 1, { activity: 'Read README.md' }),
 ]
 
+const typical: UsageLimit[] = [
+  { kind: 'five_hour', percentUsed: 23, resetsAt: new Date(NOW + 2 * 3_600_000 + 14 * 60_000).toISOString() },
+  { kind: 'seven_day', percentUsed: 41, resetsAt: new Date(NOW + 3 * 86_400_000 + 4 * 3_600_000).toISOString() },
+]
+const high: UsageLimit[] = [
+  { kind: 'five_hour', percentUsed: 96.5, resetsAt: new Date(NOW + 38 * 60_000).toISOString() },
+  { kind: 'seven_day', percentUsed: 82, resetsAt: new Date(NOW + 1 * 86_400_000 + 6 * 3_600_000).toISOString() },
+  { kind: 'spend_limit', percentUsed: 100, resetsAt: new Date(NOW + 9 * 86_400_000).toISOString() },
+]
+
 function events(runs: AgentRun[]): BridgeEvent[] {
   return runs.flatMap((one, index): BridgeEvent[] => {
     const agent = `${one.agentType.replace('galacticempire:', '')} #${one.ordinal}`
-    const spawned: BridgeEvent = { at: NOW - 30_000 + index * 4_000, agent, event: 'spawned', caption: one.description }
-    return one.status === 'working' ? [spawned] : [spawned, { at: one.finishedAt ?? NOW, agent, event: one.status, caption: one.description }]
+    const spawned: BridgeEvent = { at: NOW - 30_000 + index * 4_000, agent, event: 'spawned', caption: one.description, model: one.model }
+    return one.status === 'working' ? [spawned] : [spawned, { at: one.finishedAt ?? NOW, agent, event: one.status, caption: one.description, model: one.model }]
   })
 }
 
@@ -65,8 +84,19 @@ const longLog: AgentRun[] = Array.from({ length: 8 }, (_, index) =>
 )
 
 mkdirSync('preview', { recursive: true })
-for (const [name, runs] of Object.entries({ idle, working, reporting, aborted, busy, 'long-log': longLog })) {
-  const source = drawBridge(runs, events(runs), NOW)
+const cases: Record<string, [AgentRun[], UsageLimit[]?]> = {
+  idle: [idle],
+  working: [working],
+  reporting: [reporting],
+  aborted: [aborted],
+  models: [models],
+  busy: [busy],
+  'long-log': [longLog],
+  usage: [working, typical],
+  'usage-high': [reporting, high],
+}
+for (const [name, [runs, usage]] of Object.entries(cases)) {
+  const source = drawBridge(runs, events(runs), NOW, usage)
   writeFileSync(`preview/${name}.svg`, source)
   console.log(name, source.length)
 }

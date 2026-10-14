@@ -8,6 +8,8 @@ export const PALETTE = {
   hullLight: '#3a414b',
   hullEdge: '#5d6672',
   steel: '#8a95a3',
+  cyan: '#4fd8ff',
+  cyanDim: '#1d5f73',
   lamp: '#e8f1f7',
   green: '#7dffb2',
   greenDim: '#2f8a5c',

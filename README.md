@@ -6,7 +6,9 @@ A Claude Code mod that opens a live pane in the Claude desktop app: the command 
 - Order: on spawn, the station lights up, a dotted link runs from Thrawn to it, and the console readout shows `THRAWN → <RANK>` with the brief's `description` and the first line of its `prompt`. While any agent works, the viewport shows hyperspace; otherwise a planet.
 - Work: the console flickers and its plate shows the current tool (name plus the first 40 characters of a Bash command or a file name, cut to 30 on the plate). Each running instance of a type is a lit operator at its station, and the plate shows `x2`, `x3`.
 - Report: the link runs back to Thrawn for 3 seconds and the readout shows `<RANK> → THRAWN` with the first lines of the report and the duration. Aborted runs show in alert red with `SIGNAL LOST`.
+- Models: each plate carries a badge per running instance (HAIKU cyan, SONNET amber, OPUS red); a quiet station shows its default model dimmed. A model stronger than the roster default is an escalation: its badge turns solid with an upward chevron and the plate reads `ESCALATED`. Thrawn carries an `OPUS` marker. Readouts and log name the model after the rank, such as `THRAWN → ISB AGENT #1 [HAIKU]`.
 - Log: the console below the viewport lists the last 8 transmissions, newest first.
+- Power reserves: the console below the log shows the subscription limits as gauges: `REACTOR CORE` (5-hour limit), `FLEET CYCLE` (weekly limit) and `IMPERIAL TREASURY` (spend limit, only when the account has one). Each shows the percent used, the reset in local time (`19:29`, or `Fri 21:15` for the weekly and spend limits) and a countdown (`in 2h 14m`, `in 3d 4h`). The gauge turns amber from 70% and red from 90%. Before the first measurement it reads `AWAITING TELEMETRY`; once a measurement reports no limit (accounts without a subscription limit) it reads `NO LIMIT REPORTED`. A limit of another kind shows as a gauge under its own name. The terminal surface adds one `Usage:` line.
 
 The scene is one vector SVG (no image, no font, no URL) drawn in perspective from a camera model (`hooks/projection.ts`). The latest drawing is about 110 KB at most, under the 131,072 character limit of the `Svg` element.
 
@@ -32,6 +34,10 @@ Every station busy:
 
 ![Every station busy](docs/screenshots/busy.jpg)
 
+Power reserves, with the 5-hour and weekly limits:
+
+![The power reserves console](docs/screenshots/usage.jpg)
+
 ## Install
 
 From GitHub:
@@ -56,15 +62,18 @@ Open the pane with `/bridge`. It also opens on the first agent spawn.
 
 ## Inputs
 
-Events consumed.
+Events consumed. The plugin also calls `$.session.usage()` (not an event) to read the rate-limit windows (`five_hour`, `seven_day`, `spend_limit`) on `session.start` and `ui.open`; a failed read is logged to the debug log and never blocks them.
 
 | Name | Required | Description | Default | Type |
 | --- | --- | --- | --- | --- |
-| `session.start` | yes | Registers the `/bridge` command | none | event |
+| `session.start` | yes | Registers the `/bridge` command, then reads the limits once | none | event |
 | `command.run` (`bridge`) | yes | Opens the pane | none | event |
+| `ui.open` (`imperial-bridge`) | yes | After the pane opens: reads the limits once and starts a 60-second countdown refresh | none | event |
+| `ui.close` (`imperial-bridge`) | yes | Stops the countdown refresh | none | event |
 | `agent.spawn` | yes | Creates an instance, logs the event, opens the pane on the first spawn, starts the redraw timer | none | event |
 | `tool.call` | yes | Records the current tool of the instance named by `agentId` | none | event |
 | `turn.complete` | yes | Marks the instance reported or aborted, with its duration | none | event |
+| `session.measure` | yes | Replaces the limits with `rateLimits` and refreshes the rate-limit windows after each turn and when a limit moves | none | event |
 | `ui.render` (`Pane`) | yes | Draws the bridge (desktop) or the event lines (terminal) | none | event |
 
 ## Outputs
@@ -72,9 +81,10 @@ Events consumed.
 | Name | Required | Description | Default | Type |
 | --- | --- | --- | --- | --- |
 | `imperial-bridge` pane | yes | The bridge scene (SVG) with the order, report and log consoles | none | pane |
+| usage window | yes | The power reserves console: percent used, reset time and countdown per limit, `AWAITING TELEMETRY` before the first measurement, or `NO LIMIT REPORTED` | `AWAITING TELEMETRY` | SVG console |
 | `/bridge` | yes | Slash command that opens the pane | none | command |
 
-The pane draws the SVG scene on the desktop surface; the terminal surface shows the event lines only.
+The pane draws the SVG scene on the desktop surface; the terminal surface shows the event lines and a `Usage:` line.
 
 ## Development
 
@@ -84,7 +94,7 @@ claude plugin test .
 tsc -p .   # once the engine has written .claude-plugin/types/
 ```
 
-Preview the scene with sample data (idle, working, reporting, aborted, every station busy). The files are written to `preview/`, which is git-ignored; open them in a browser:
+Preview the scene with sample data (idle, working, reporting, aborted, models, every station busy, long log, usage and high usage). The files are written to `preview/`, which is git-ignored; open them in a browser:
 
 ```
 node --import ./tools/resolve-typescript.mjs tools/render-preview.ts
@@ -95,7 +105,9 @@ node --import ./tools/resolve-typescript.mjs tools/render-preview.ts
 | `hooks/scene.ts` | Assembles the drawing: definitions, links, header |
 | `hooks/backdrop.ts` | Windows, space, hall, walkway, Thrawn |
 | `hooks/stations.ts` | Station layout, consoles, operators, rank plates |
-| `hooks/transmissions.ts` | Order, report and log consoles |
+| `hooks/models.ts` | Model badges, escalation test, Thrawn's OPUS marker |
+| `hooks/transmissions.ts` | Order, report and log consoles, the shared console screen and layout |
+| `hooks/usage.ts` | Power reserves console and the percent, reset and countdown formatting |
 | `hooks/projection.ts` | The camera: metres to screen pixels |
 | `hooks/svg.ts` | Palette, text, deterministic randomness, pseudo-Aurebesh glyphs |
 

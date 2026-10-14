@@ -1,5 +1,6 @@
 import type { AgentRun } from '../types'
 import { REPORT_BEAM_MS, ROSTER, displayName, phaseOf, shortType } from './bridge'
+import { ESCALATION_TAG_WIDTH, badgeWidth, defaultModelOf, drawBadge, drawEscalationTag, isEscalated } from './models'
 import { depthAtScreenRow, faceTransform, project } from './projection'
 import { PALETTE, glyphString, line, polygon, randomSequence, round, seedOf, text } from './svg'
 import type { Point } from './svg'
@@ -12,6 +13,8 @@ const PLATE_HEIGHT = 2.3
 const DESK = { inner: 2.4, depth: 1.4, height: 1.0, width: 0.8 }
 const BANK = { width: 1.2, height: 1.9 }
 const CHARACTER_WIDTH = 7.9
+const BADGE_GAP = 4
+const MAX_BADGES = 4
 
 export type Station = {
   type: string
@@ -194,6 +197,18 @@ function activityOf(station: Station): string {
   return tool === undefined ? 'AWAITING ORDERS' : `> ${tool.toUpperCase()}`
 }
 
+type PlateBadge = { model: string; isEscalated: boolean; isDimmed: boolean }
+
+/** One badge per running instance, or the default model dimmed while the station is quiet. */
+function badgesOf(station: Station): PlateBadge[] {
+  const defaultModel = defaultModelOf(station.type)
+  if (station.working.length === 0) {
+    return defaultModel === undefined ? [] : [{ model: defaultModel, isEscalated: false, isDimmed: true }]
+  }
+
+  return station.working.slice(0, MAX_BADGES).map(run => ({ model: run.model, isEscalated: isEscalated(run.model, defaultModel), isDimmed: false }))
+}
+
 /** The rank plate floating above a console; a second line names the tool while the station works. */
 export function drawPlate(station: Station): Plate {
   const { side, rowZ, mood, working } = station
@@ -202,7 +217,12 @@ export function drawPlate(station: Station): Plate {
   const count = working.length > 1 ? `  x${working.length}` : ''
   const title = `${station.label}${count}`
   const detail = mood === 'working' ? activityOf(station).slice(0, 30) : ''
-  const width = Math.max(title.length, detail.length) * CHARACTER_WIDTH + 16
+  const badges = badgesOf(station)
+  const escalation = badges.find(badge => badge.isEscalated)
+  const badgesWidth = badges.reduce((total, badge) => total + BADGE_GAP + badgeWidth(badge.model, badge), 0)
+  const titleWidth = title.length * CHARACTER_WIDTH + badgesWidth
+  const detailWidth = detail.length * CHARACTER_WIDTH + (escalation === undefined ? 0 : BADGE_GAP * 3 + ESCALATION_TAG_WIDTH)
+  const width = Math.max(titleWidth, detailWidth) + 16
   const height = detail === '' ? 19 : 34
   const centerX = Math.min(1000 - width / 2 - 6, Math.max(width / 2 + 6, anchor.x))
   const left = centerX - width / 2
@@ -210,6 +230,14 @@ export function drawPlate(station: Station): Plate {
   const stroke = mood === 'idle' ? '#2a4a3a' : tone.text
   const accent = `<rect x="${round(left)}" y="${round(top)}" width="3" height="${height}" fill="${tone.text}"/>`
   const second = detail === '' ? '' : text(left + 10, top + 28, detail, PALETTE.green, { size: 11.5, opacity: 0.9 })
+  const tag = escalation === undefined ? '' : drawEscalationTag(left + width - 8 - ESCALATION_TAG_WIDTH, top + 28, escalation.model)
+  let badgeLeft = left + 10 + title.length * CHARACTER_WIDTH
+  let marks = ''
+  for (const badge of badges) {
+    badgeLeft += BADGE_GAP
+    marks += drawBadge(badgeLeft, top + 3.5, badge.model, badge)
+    badgeLeft += badgeWidth(badge.model, badge)
+  }
   const markup =
     `<g>` +
     line(anchor, { x: anchor.x, y: anchor.y + 6 }, `stroke="${stroke}" stroke-width="1"`) +
@@ -217,7 +245,9 @@ export function drawPlate(station: Station): Plate {
     `<rect x="${round(left)}" y="${round(top)}" width="${round(width)}" height="${height}" fill="#020805" fill-opacity="0.9" stroke="${stroke}" stroke-width="1"/>` +
     accent +
     text(left + 10, top + 13.5, title, tone.text, { size: 12.5, weight: 600 }) +
+    marks +
     second +
+    tag +
     `</g>`
 
   return { markup, anchor: { x: centerX, y: top + height / 2 } }

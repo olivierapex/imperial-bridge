@@ -39,6 +39,11 @@ export function modelFamily(model: string): string {
   return ['haiku', 'sonnet', 'opus'].find(family => model.includes(family)) ?? model
 }
 
+/** The model in brackets after a rank, such as " [HAIKU]"; empty when the model is unknown. */
+export function modelTag(model: string | undefined): string {
+  return model === undefined || model === '' ? '' : ` [${modelFamily(model).toUpperCase()}]`
+}
+
 /** The tool name plus the first 40 characters of a Bash command or a file name. */
 export function describeActivity(e: ToolCallInput): string {
   if (e.tool === 'Bash') return `Bash ${e.command.slice(0, 40)}`
@@ -70,7 +75,7 @@ export function agentLabel(run: AgentRun): string {
 
 export function formatEvent(event: BridgeEvent): string {
   const time = new Date(event.at).toTimeString().slice(0, 8)
-  return `${time}  ${event.agent}  ${event.event}  ${event.caption}`
+  return `${time}  ${event.agent}${modelTag(event.model)}  ${event.event}  ${event.caption}`
 }
 
 /** Index of the run owned by an agent; a run not yet bound to an id is claimed by the first unknown id. */

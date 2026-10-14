@@ -1,4 +1,4 @@
-import type { AgentRun, BridgeEvent } from '../types'
+import type { AgentRun, BridgeEvent, UsageLimit } from '../types'
 import { THRAWN_Z, WALKWAY, drawHall, drawThrawn, drawWalkway } from './backdrop'
 import { phaseOf } from './bridge'
 import { project } from './projection'
@@ -6,6 +6,7 @@ import { TONES, drawConsole, drawPlate, layoutStations } from './stations'
 import type { Station } from './stations'
 import { PALETTE, glyphString, round, text } from './svg'
 import { BOTTOM, CONSOLE_TOP, drawTransmissions } from './transmissions'
+import { drawUsage } from './usage'
 
 export const WIDTH = 1000
 export const HEIGHT = BOTTOM
@@ -67,7 +68,7 @@ function drawHeader(runs: AgentRun[], now: number): string {
 }
 
 /** The command bridge as an SVG document. */
-export function drawBridge(runs: AgentRun[], events: BridgeEvent[], now: number): string {
+export function drawBridge(runs: AgentRun[], events: BridgeEvent[], now: number, usage?: UsageLimit[]): string {
   const stations = layoutStations(runs, now).sort((a, b) => b.rowZ - a.rowZ)
   const plates = stations.map(station => drawPlate(station))
   const links = stations.map((station, index) => drawLink(station, plates[index].anchor, now)).join('')
@@ -87,6 +88,7 @@ export function drawBridge(runs: AgentRun[], events: BridgeEvent[], now: number)
     drawHeader(runs, now) +
     `</g>` +
     drawTransmissions(runs, events, now) +
+    drawUsage(usage, now) +
     `</svg>`
   )
 }

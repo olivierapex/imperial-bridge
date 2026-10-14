@@ -1,27 +1,28 @@
 import type { AgentRun, BridgeEvent } from '../types'
-import { MAX_EVENTS, clip, displayName, formatDuration, shortType, wrapText } from './bridge'
+import { MAX_EVENTS, clip, displayName, formatDuration, modelTag, shortType, wrapText } from './bridge'
 import { PALETTE, escapeXml, glyphString, line, round, text } from './svg'
 
 export const CONSOLE_TOP = 740
-const MARGIN = 24
+export const MARGIN = 24
 const GAP = 16
 const READOUT = { top: 764, height: 140 }
-const LOG = { top: 914, height: 212 }
+export const LOG = { top: 914, height: 212 }
+export const USAGE = { top: LOG.top + LOG.height + GAP, height: 140 }
 const LOG_ROW = 18
-const LOG_HEAD_COLUMNS = 36
+const LOG_HEAD_COLUMNS = 45
 const READOUT_WIDTH = (1000 - 2 * MARGIN - GAP) / 2
 const READOUT_COLUMNS = 45
 export const LOG_COLUMNS = 108
 const LOG_TIME_COLUMNS = 10
-export const BOTTOM = LOG.top + LOG.height + MARGIN
+export const BOTTOM = USAGE.top + USAGE.height + MARGIN
 
-type Accent = { bright: string; dim: string }
-const AMBER: Accent = { bright: PALETTE.amber, dim: PALETTE.amberDim }
-const GREEN: Accent = { bright: PALETTE.green, dim: PALETTE.greenDim }
-const RED: Accent = { bright: PALETTE.red, dim: PALETTE.redDim }
+export type Accent = { bright: string; dim: string }
+export const AMBER: Accent = { bright: PALETTE.amber, dim: PALETTE.amberDim }
+export const GREEN: Accent = { bright: PALETTE.green, dim: PALETTE.greenDim }
+export const RED: Accent = { bright: PALETTE.red, dim: PALETTE.redDim }
 
 function rankOf(run: AgentRun): string {
-  return `${displayName(shortType(run.agentType)).toUpperCase()} #${run.ordinal}`
+  return `${displayName(shortType(run.agentType)).toUpperCase()} #${run.ordinal}${modelTag(run.model)}`
 }
 
 function tspan(content: string, fill: string): string {
@@ -29,10 +30,11 @@ function tspan(content: string, fill: string): string {
 }
 
 /** An Imperial console screen: bezel, scan lines, a title bar and corner brackets. Returns the markup and the top of the body. */
-function screen(x: number, y: number, width: number, height: number, title: string, right: string, accent: Accent, seed: string): { markup: string; body: number } {
+export function screen(x: number, y: number, width: number, height: number, title: string, right: string, accent: Accent, seed: string): { markup: string; body: number } {
   const inner = { x: x + 8, y: y + 8, width: width - 16, height: height - 16 }
   const bracket = (cornerX: number, cornerY: number, horizontal: number, vertical: number) =>
     `<path d="M${round(cornerX)} ${round(cornerY + vertical * 9)}V${round(cornerY)}H${round(cornerX + horizontal * 9)}" fill="none" stroke="${accent.bright}" stroke-width="1.6"/>`
+  const glyphLeft = inner.x + inner.width - 16 - right.length * 7.6 - 118
   const markup =
     `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="3" fill="${PALETTE.hullDark}" stroke="${PALETTE.hullEdge}" stroke-width="1.5"/>` +
     `<rect x="${x - 2}" y="${y - 2}" width="${width + 4}" height="${height + 4}" rx="4" fill="none" stroke="${accent.bright}" stroke-width="3" opacity="0.14" filter="url(#glowSoft)"/>` +
@@ -43,7 +45,7 @@ function screen(x: number, y: number, width: number, height: number, title: stri
     bracket(inner.x + inner.width - 4, inner.y + 4, -1, 1) +
     text(inner.x + 16, inner.y + 25, title, accent.bright, { size: 13.5, weight: 700, spacing: 0.6 }) +
     text(inner.x + inner.width - 16, inner.y + 25, right, accent.bright, { size: 12.5, anchor: 'end', opacity: 0.85 }) +
-    glyphString(inner.x + inner.width - 16 - right.length * 7.6 - 118, inner.y + 25, seed, 8, 11, accent.bright, 0.55) +
+    (glyphLeft > inner.x + 16 + title.length * 8.7 + 12 ? glyphString(glyphLeft, inner.y + 25, seed, 8, 11, accent.bright, 0.55) : '') +
     line({ x: inner.x + 12, y: inner.y + 34 }, { x: inner.x + inner.width - 12, y: inner.y + 34 }, `stroke="${accent.dim}" stroke-width="1"`)
 
   return { markup, body: inner.y + 56 }
@@ -92,7 +94,8 @@ function drawReport(run: AgentRun | undefined, now: number): string {
 function drawLog(events: BridgeEvent[]): string {
   const panel = screen(MARGIN, LOG.top, 1000 - 2 * MARGIN, LOG.height, 'TRANSMISSION LOG', `${Math.min(events.length, MAX_EVENTS)} OF ${MAX_EVENTS}`, GREEN, 'log')
   const rows = events.slice(-MAX_EVENTS).reverse().map((event, index) => {
-    const [from, to] = event.event === 'spawned' ? ['THRAWN', event.agent.toUpperCase()] : [event.agent.toUpperCase(), 'THRAWN']
+    const agent = `${event.agent.toUpperCase()}${modelTag(event.model)}`
+    const [from, to] = event.event === 'spawned' ? ['THRAWN', agent] : [agent, 'THRAWN']
     const tone = event.event === 'aborted' ? PALETTE.red : event.event === 'spawned' ? PALETTE.amber : PALETTE.green
     const time = new Date(event.at).toTimeString().slice(0, 8)
     const head = clip(`${from} → ${to}`, LOG_HEAD_COLUMNS - 1).padEnd(LOG_HEAD_COLUMNS)

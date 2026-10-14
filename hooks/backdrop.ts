@@ -1,3 +1,4 @@
+import { drawCommanderMarker } from './models'
 import { faceTransform, project } from './projection'
 import { PALETTE, glyphString, line, pointsOf, polygon, randomSequence, round } from './svg'
 import type { Point } from './svg'
@@ -200,6 +201,7 @@ export function drawThrawn(): string {
     `<ellipse cx="0" cy="-1.74" rx="0.085" ry="0.11" fill="url(#face)"/>` +
     `<circle cx="-0.035" cy="-1.75" r="0.014" fill="#ff3b2e"/><circle cx="0.035" cy="-1.75" r="0.014" fill="#ff3b2e"/>` +
     `<circle cx="-0.035" cy="-1.75" r="0.04" fill="#ff3b2e" opacity="0.25" filter="url(#glowSoft)"/><circle cx="0.035" cy="-1.75" r="0.04" fill="#ff3b2e" opacity="0.25" filter="url(#glowSoft)"/>` +
-    `</g>`
+    `</g>` +
+    drawCommanderMarker(foot.x, foot.y + 7)
   )
 }
